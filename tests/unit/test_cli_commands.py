@@ -26,6 +26,22 @@ def test_help_lists_commands() -> None:
     assert res.action == "message" and "/exit" in res.text and "/clear" in res.text
 
 
+def test_help_lists_skills_when_given() -> None:
+    res = dispatch("/help", "", [("brainstorming", "Explore ideas before building.")])
+    assert "/brainstorming" in res.text and "Skills" in res.text
+    assert "Explore ideas" in res.text
+
+
+def test_help_omits_skill_section_without_skills() -> None:
+    assert "Skills" not in dispatch("/help", "").text  # no skills → no empty section
+
+
+def test_help_collapses_long_skill_description() -> None:
+    res = dispatch("/help", "", [("x", "word " * 40)])  # ~200 chars, multi-space
+    skill_row = next(line for line in res.text.splitlines() if line.strip().startswith("/x"))
+    assert skill_row.endswith("…") and len(skill_row.strip()) <= 66  # "/x  " + 60-cap + ellipsis
+
+
 def test_clear_and_exit_actions() -> None:
     assert dispatch("/clear", "") == CommandResult("clear")
     assert dispatch("/exit", "") == CommandResult("exit")

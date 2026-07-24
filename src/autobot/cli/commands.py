@@ -9,7 +9,10 @@ any shell. This module only owns parsing plus the client-side trio (``/help``, `
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+
+_SKILL_DESC_MAX = 60  # skill descriptions can be long; the /help listing shows a short head
 
 COMMANDS: dict[str, str] = {
     "/help": "show this help",
@@ -82,14 +85,30 @@ def skill_nudge(name: str, args: str) -> str:
     return f"{base} {args}".strip() if args.strip() else base
 
 
-def _help_text() -> str:
-    return "Commands:\n" + "\n".join(f"  {name}  {desc}" for name, desc in COMMANDS.items())
+def _one_line(text: str, limit: int = _SKILL_DESC_MAX) -> str:
+    """Collapse a skill description to a single, length-capped line for the /help listing."""
+    line = " ".join(text.split())  # fold newlines / runs so each skill stays one row
+    return line if len(line) <= limit else line[: limit - 1].rstrip() + "…"
 
 
-def dispatch(name: str, args: str) -> CommandResult:
-    """Run a client-side command by name."""
+def _help_text(skills: Sequence[tuple[str, str]] = ()) -> str:
+    """The ``/help`` listing: built-in commands, then any installed skills (shown as ``/name``).
+
+    Skills are invoked exactly like commands (``/brainstorming``) but activate a skill instead,
+    so listing them here — next to the completer's ``/`` menu — is the readable answer to "what
+    can I run?". ``skills`` is the same ``(name, description)`` catalog the completer uses.
+    """
+    lines = ["Commands:", *(f"  {name}  {desc}" for name, desc in COMMANDS.items())]
+    if skills:
+        lines += ["", "Skills (type / to autocomplete):"]
+        lines += [f"  /{name}  {_one_line(desc)}" for name, desc in skills]
+    return "\n".join(lines)
+
+
+def dispatch(name: str, args: str, skills: Sequence[tuple[str, str]] = ()) -> CommandResult:
+    """Run a client-side command by name (``skills`` enriches the ``/help`` listing)."""
     if name == "/help":
-        return CommandResult("message", _help_text())
+        return CommandResult("message", _help_text(skills))
     if name == "/clear":
         return CommandResult("clear")
     if name == "/exit":

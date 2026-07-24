@@ -11,6 +11,7 @@ expansion, slash-command routing, session footer) are unit-tested without a TTY 
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Sequence
 from typing import Any
 
 from autobot.cli import coder_commands, commands, debug_report, mentions
@@ -166,18 +167,25 @@ def skill_catalog(cwd: str) -> list[tuple[str, str]]:
 
 
 def route_command(
-    name: str, args: str, *, base_url: str, cwd: str, width: int
+    name: str,
+    args: str,
+    *,
+    base_url: str,
+    cwd: str,
+    width: int,
+    skills: Sequence[tuple[str, str]] = (),
 ) -> tuple[Any | None, str]:
     """Route a slash command; return ``(renderable_or_text | None, action)``.
 
     ``action`` is ``""`` (just render the first element), ``"clear"``, or ``"exit"``.
     Daemon-backed commands (``/diff`` …) go through ``coder_commands.handle`` first; the
-    client-side trio (``/help /clear /exit``) falls back to ``commands.dispatch``.
+    client-side trio (``/help /clear /exit``) falls back to ``commands.dispatch``. ``skills``
+    is threaded to ``dispatch`` so ``/help`` can list the installed skills alongside commands.
     """
     rendered = coder_commands.handle(name, args, base_url=base_url, cwd=cwd, width=width)
     if rendered is not None:
         return rendered, ""
-    res = commands.dispatch(name, args)
+    res = commands.dispatch(name, args, skills)
     if res.action == "exit":
         return None, "exit"
     if res.action == "clear":
@@ -250,7 +258,9 @@ def run(base_url: str, cwd: str) -> None:  # pragma: no cover - launches the int
                 if not japp.expand_output(int(arg) if arg.isdigit() else None):
                     surface.commit(Text("No command output to show yet.", style="dim"))
                 return
-            out, action = route_command(name, cargs, base_url=base_url, cwd=cwd, width=japp._cols())
+            out, action = route_command(
+                name, cargs, base_url=base_url, cwd=cwd, width=japp._cols(), skills=skills
+            )
             if action == "exit":
                 japp._exiting = True
                 japp.app.exit()
