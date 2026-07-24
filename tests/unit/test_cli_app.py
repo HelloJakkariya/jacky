@@ -509,3 +509,39 @@ def test_on_context_event_updates_state() -> None:
     assert japp.hud_state.used == 50000
     assert japp.hud_state.window == 200000
     assert japp.hud_state.model == "opus"
+
+
+def test_skills_and_ghost_are_wired_into_the_live_input() -> None:
+    """``skills=`` threads into the live buffer's completer + inline ghost (wiring integration).
+
+    Proves the app actually composes the completer with the passed-in skills and installs a
+    :class:`JackAutoSuggest`, so the behaviours unit-tested on the pure pieces are what the
+    running input uses. No event loop needed — reach into the constructed buffer directly.
+    """
+    from prompt_toolkit.completion import CompleteEvent
+    from prompt_toolkit.document import Document
+
+    from autobot.cli.prompt import JackAutoSuggest
+
+    async def noop(_t: str, _n: int) -> None:
+        return None
+
+    japp = JackApp(
+        cwd="/x",
+        run_turn=noop,
+        commands={"/exit": "quit", "/help": "help"},
+        skills=[("deep-research", "Fan-out research"), ("explain-code", "Walk code")],
+        input=DummyInput(),
+        output=DummyOutput(),
+    )
+    comp = japp._input.completer
+    assert comp is not None
+    ev = CompleteEvent()
+    start = [c.text for c in comp.get_completions(Document("/", 1), ev)]
+    assert "/help" in start and "/deep-research" in start  # line start: commands + skills
+    mid = [c.text for c in comp.get_completions(Document("fix /e", 6), ev)]
+    assert "/explain-code" in mid and "/exit" not in mid  # mid-line: skills only, never /exit
+
+    assert isinstance(japp._input.auto_suggest, JackAutoSuggest)
+    sug = japp._input.auto_suggest.get_suggestion(japp._input, Document("/he", 3))
+    assert sug is not None and sug.text == "lp"  # inline ghost previews the top match

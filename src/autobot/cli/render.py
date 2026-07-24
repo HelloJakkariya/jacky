@@ -189,7 +189,7 @@ def render_welcome(ctx: dict[str, str]) -> RenderableType:
     from rich.text import Text
 
     cwd = Text(ctx.get("cwd", ""), style="dim")
-    tip = Text("💡 Tip  type / for commands, @ to add a file", style="dim")
+    tip = Text("💡 Tip  type / for commands & skills, @ to add a file", style="dim")
     return Group(cwd, Text(""), tip)
 
 

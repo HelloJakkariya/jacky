@@ -97,6 +97,11 @@ def tool_label(call: ToolCall) -> str:
         return f"Checked {_file_name(str(args.get('path', '')))}".strip()
     if call.name == "spawn_agent":
         return f"Spawned subagent: {str(args.get('label') or args.get('task', ''))[:70]}".strip()
+    if call.name == "skill":
+        return f"Skill: {str(args.get('name', ''))[:40]}".strip()
+    if call.name == "read_skill_file":
+        name, path = str(args.get("name", "")), str(args.get("path", ""))
+        return f"Skill file {name}/{path}".strip("/ ") or "Skill file"
     # MCP tools (<server>__<tool>): show the server as the label's subject so the activity
     # line reads "github: create issue" instead of a mangled capitalization.
     ns = split_namespaced(call.name)

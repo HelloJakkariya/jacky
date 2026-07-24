@@ -83,6 +83,19 @@ def test_route_command_help_renders(tmp_path: Path) -> None:
     assert out is not None and "/exit" in str(out)
 
 
+def test_route_command_help_lists_skills(tmp_path: Path) -> None:
+    # The startup skill catalog is threaded into /help so it lists skills next to commands.
+    out, action = shell.route_command(
+        "/help",
+        "",
+        base_url="http://x",
+        cwd=str(tmp_path),
+        width=80,
+        skills=[("brainstorming", "Explore ideas.")],
+    )
+    assert action == "" and out is not None and "/brainstorming" in str(out)
+
+
 def test_route_command_exit_signals_exit(tmp_path: Path) -> None:
     out, action = shell.route_command("/exit", "", base_url="http://x", cwd=str(tmp_path), width=80)
     assert action == "exit" and out is None

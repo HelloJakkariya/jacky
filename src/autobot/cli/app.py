@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from io import StringIO
 from typing import TYPE_CHECKING, Any
@@ -32,6 +32,7 @@ from prompt_toolkit.filters import Condition
 from prompt_toolkit.formatted_text import ANSI
 from prompt_toolkit.history import History, InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
+from prompt_toolkit.key_binding.bindings.auto_suggest import load_auto_suggest_bindings
 from prompt_toolkit.key_binding.defaults import load_key_bindings
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.layout import (
@@ -53,7 +54,7 @@ from prompt_toolkit.widgets import Frame
 
 from autobot.cli import live_region, paste, theme
 from autobot.cli.paste import PasteStore
-from autobot.cli.prompt import Answer, JackCompleter
+from autobot.cli.prompt import Answer, JackAutoSuggest, JackCompleter
 from autobot.cli.theme import jack_theme
 from autobot.logging_setup import get_logger
 
@@ -82,6 +83,7 @@ _STYLE = Style.from_dict(
         "status": "#c7d0cb bg:#1a231f",
         "status.key": "#4fd6b8 bg:#1a231f",
         "inputframe": "#4fd6b8",  # teal border around the input box
+        "auto-suggestion": "#5b665f",  # dim grey ghost text for the inline autocomplete
     }
 )
 
@@ -234,6 +236,7 @@ class JackApp:
         cwd: str,
         run_turn: _RunTurn,
         commands: dict[str, str],
+        skills: Sequence[tuple[str, str]] = (),
         context: dict[str, str] | None = None,
         intro: Any | None = None,
         on_interrupt: Callable[[], Any] | None = None,
@@ -243,9 +246,10 @@ class JackApp:
     ) -> None:
         """Wire the app; ``run_turn(text, turn_no)`` is the injected turn coroutine.
 
-        ``context`` populates the status bar (model/autonomy/branch); ``intro`` seeds the
-        transcript (the welcome banner). ``input``/``output`` are forwarded to the
-        ``Application`` (tests inject a pipe input + ``DummyOutput``).
+        ``commands``/``skills`` populate the ``/`` completer + inline ghost text (skills as
+        ``(name, description)``). ``context`` populates the status bar (model/autonomy/branch);
+        ``intro`` seeds the transcript (the welcome banner). ``input``/``output`` are forwarded
+        to the ``Application`` (tests inject a pipe input + ``DummyOutput``).
         """
         self._cwd = cwd
         self._run_turn = run_turn
@@ -294,9 +298,11 @@ class JackApp:
         self._secret_mode = False  # mask the input buffer while a "secret" ask is active
         self._pending_pickups: list[dict[str, Any]] = []
         self._pastes = PasteStore()  # large pastes stashed behind [Pasted #N] placeholders
+        completer = JackCompleter(commands, cwd, skills=skills)
         self._input = Buffer(
             accept_handler=self._on_accept,
-            completer=JackCompleter(commands, cwd),
+            completer=completer,
+            auto_suggest=JackAutoSuggest(completer),  # dim inline ghost of the top match
             complete_while_typing=True,
             history=history or InMemoryHistory(),  # ↑/↓ recall previous submissions
             multiline=True,  # box grows for multi-line paste/typing (Enter submits; ^J newline)
@@ -315,7 +321,12 @@ class JackApp:
         )
         self.app: Application[None] = Application(
             layout=self._build_layout(),
-            key_bindings=merge_key_bindings([load_key_bindings(), self._bindings()]),
+            key_bindings=merge_key_bindings(
+                # auto-suggest bindings: →/End/^E/^F accept the inline ghost (only when one is
+                # shown and the cursor is at the end — they fall through to normal cursor moves
+                # otherwise), so they never clash with the custom bindings below.
+                [load_key_bindings(), load_auto_suggest_bindings(), self._bindings()]
+            ),
             style=_STYLE,
             full_screen=True,  # docks input + status bar at the bottom, transcript above
             mouse_support=True,  # capture wheel → scroll the transcript (Mac trackpad-friendly)

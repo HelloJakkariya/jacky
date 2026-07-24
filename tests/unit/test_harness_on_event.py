@@ -50,6 +50,13 @@ def test_tool_label_maps_common_calls() -> None:
     assert tool_label(ToolCall(name="repo_map", arguments={})) == "Repo map"
 
 
+def test_tool_label_names_the_activated_skill() -> None:
+    # Activating a skill must show WHICH skill (the reported bug was a bare "Skill").
+    assert tool_label(ToolCall(name="skill", arguments={"name": "spinup"})) == "Skill: spinup"
+    read = tool_label(ToolCall(name="read_skill_file", arguments={"name": "spinup", "path": "x"}))
+    assert read == "Skill file spinup/x"
+
+
 def test_tool_label_shows_just_the_file_name() -> None:
     # Paths collapse to the bare file name — a long absolute or nested path is hard to scan.
     assert tool_label(ToolCall("read_file", {"path": "/work/proj/package.json"})) == (

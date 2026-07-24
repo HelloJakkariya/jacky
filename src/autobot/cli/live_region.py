@@ -23,6 +23,8 @@ _ACTIONS: dict[str, str] = {
     "spawn_agent": "Running subagent",
     "repo_map": "Mapping the repo",
     "update_plan": "Planning",
+    "skill": "Loading skill",
+    "read_skill_file": "Reading skill file",
 }
 
 # The label shown while the model is thinking (no tool running yet).
