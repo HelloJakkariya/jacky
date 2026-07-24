@@ -153,7 +153,7 @@ def test_main_one_shot(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFi
     seen_port: list[int] = []
     monkeypatch.setattr(cli, "ensure_daemon", lambda base, port, **_k: seen_port.append(port))
     monkeypatch.setattr(cli, "run_coder_turn", lambda base, text, **k: "the reply")
-    rc = cli.main(["--port", "9001", "do a thing"])
+    rc = cli.main(["--port", "9001", "-p", "do a thing"])
     assert rc == 0
     assert "the reply" in capsys.readouterr().out
     assert seen_port == [9001]  # main() forwards --port to the daemon spawn
@@ -166,7 +166,7 @@ def test_main_returns_1_when_daemon_cannot_start(
         raise TimeoutError("coder daemon did not start")
 
     monkeypatch.setattr(cli, "ensure_daemon", boom)
-    rc = cli.main(["do a thing"])
+    rc = cli.main(["-p", "do a thing"])
     assert rc == 1
     assert "did not start" in capsys.readouterr().err
 
@@ -180,7 +180,7 @@ def test_main_surfaces_daemon_startup_error(
         raise RuntimeError("the coder daemon couldn't start (exit 1). ... needs the daemon extra")
 
     monkeypatch.setattr(cli, "ensure_daemon", boom)
-    rc = cli.main(["do a thing"])
+    rc = cli.main(["-p", "do a thing"])
     assert rc == 1
     assert "daemon extra" in capsys.readouterr().err
 
@@ -193,7 +193,7 @@ def test_main_handles_ctrl_c_cleanly(
         raise KeyboardInterrupt
 
     monkeypatch.setattr(cli, "ensure_daemon", interrupted)
-    rc = cli.main(["do a thing"])
+    rc = cli.main(["-p", "do a thing"])
     assert rc == 130
     assert "cancel" in capsys.readouterr().err.lower()
 
@@ -213,7 +213,7 @@ def test_main_ctrl_c_sends_best_effort_reject(
 
     monkeypatch.setattr(cli, "ensure_daemon", interrupted)
     monkeypatch.setattr(cli, "_post", fake_post)
-    rc = cli.main(["--port", "9001", "do a thing"])
+    rc = cli.main(["--port", "9001", "-p", "do a thing"])
     assert rc == 130
     assert "cancel" in capsys.readouterr().err.lower()
     assert calls == [("http://127.0.0.1:9001/coder/reply", {"value": "reject"})]
@@ -231,7 +231,7 @@ def test_main_ctrl_c_swallows_post_failure(
 
     monkeypatch.setattr(cli, "ensure_daemon", interrupted)
     monkeypatch.setattr(cli, "_post", boom_post)
-    rc = cli.main(["do a thing"])
+    rc = cli.main(["-p", "do a thing"])
     assert rc == 130
     assert "cancel" in capsys.readouterr().err.lower()
 
@@ -302,5 +302,5 @@ def test_main_with_text_still_one_shot(
 ) -> None:
     monkeypatch.setattr(cli, "ensure_daemon", lambda base, port, **_k: None)
     monkeypatch.setattr(cli, "run_coder_turn", lambda base, text, **k: "the reply")
-    rc = cli.main(["do a thing"])
+    rc = cli.main(["-p", "do a thing"])
     assert rc == 0 and "the reply" in capsys.readouterr().out

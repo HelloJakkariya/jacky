@@ -7,6 +7,7 @@ import contextlib
 import os
 import subprocess
 import sys
+from difflib import get_close_matches
 from pathlib import Path
 
 from autobot.cli.client import (
@@ -176,13 +177,88 @@ def _run_debug() -> int:
     return 0
 
 
+# The user-facing subcommands, in help-display order. `serve` is intentionally omitted — it's
+# an internal entry point used by the frozen re-exec, not something a user runs. This table is
+# the single source of truth for `jack help` and the unknown-command suggestions, so the
+# advertised commands can never drift from what dispatch actually accepts.
+_SUBCOMMANDS: tuple[tuple[str, str], ...] = (
+    ("config", "show or change settings"),
+    ("skills", "list, add, or inspect skills"),
+    ("workflows", "list, show, or run workflows"),
+    ("mcp", "manage MCP servers (list · add · enable · auth · tools)"),
+    ("cost", "show usage & cost (cost --open for the dashboard)"),
+    ("debug", "write a shareable debug report of this session"),
+    ("daemons", "list running coder daemons"),
+    ("restart", "restart this workspace's coder daemon"),
+    ("stop", "stop this workspace's daemon (stop --all for all)"),
+    ("trust", "trust this folder so Jack can read, write & run here"),
+    ("update", "update the installed jack binary"),
+    ("version", "print the jack version"),
+)
+
+
+def _usage_text() -> str:
+    """The top-level `jack help` / `jack --help` listing, built from :data:`_SUBCOMMANDS`."""
+    rows = "\n".join(f"  {name:<10} {summary}" for name, summary in _SUBCOMMANDS)
+    return (
+        "jack — a local coding agent in your terminal.\n"
+        "\n"
+        "Usage:\n"
+        "  jack                     open the interactive TUI in this workspace\n"
+        '  jack -p "<request>"      run a single request, print the reply, and exit\n'
+        "  jack <command> [args]    run one of the commands below\n"
+        "\n"
+        f"Commands:\n{rows}\n"
+        "\n"
+        "Run 'jack <command> help' for a command's own options (e.g. jack config help)."
+    )
+
+
+def _unknown_command(argv: list[str]) -> int:
+    """Report a bare word that isn't a subcommand — never run it as an agent turn.
+
+    Shows a "did you mean" for a near-miss, points at ``jack help``, and reminds the user that a
+    free-form request goes through ``-p`` — so ``jack sessions`` teaches instead of silently
+    executing. Returns the conventional usage exit code (2); touches neither trust nor daemon.
+    """
+    cmd = argv[0]
+    lines = [f"jack: unknown command {cmd!r}."]
+    # cutoff 0.75: real typos ("skils"→"skills") score ≥0.9, while weak overlaps
+    # ("sessions"→"version" is 0.67) fall away — a misleading suggestion is worse than none.
+    close = get_close_matches(cmd.split()[0], [name for name, _ in _SUBCOMMANDS], n=1, cutoff=0.75)
+    if close:
+        lines.append(f"Did you mean '{close[0]}'?")
+    lines.append("Run 'jack help' to see all commands.")
+    lines.append(f'To send this as a request:  jack -p "{" ".join(argv)}"')
+    print("\n".join(lines), file=sys.stderr)
+    return 2
+
+
+def _split_prompt(argv: list[str]) -> tuple[str | None, list[str]]:
+    """Split a flags-mode argv into ``(request, leading-flags)``.
+
+    ``-p``/``--prompt`` marks a one-shot request: everything after it is the request text (so both
+    ``jack -p "fix the bug"`` and ``jack -p fix the bug`` work), and any flags before it
+    (``--port``, ``--workspace``) stay for the parser. With no ``-p`` there is no request, and the
+    caller opens the TUI instead.
+    """
+    for i, token in enumerate(argv):
+        if token in ("-p", "--prompt"):
+            request = " ".join(argv[i + 1 :]).strip()
+            return (request or None), argv[:i]
+    return None, argv
+
+
 def main(argv: list[str] | None = None) -> int:
-    """`jack` opens the TUI; `jack "…"` runs a request; `jack config …` manages settings."""
+    """`jack` opens the TUI; `jack -p "…"` runs a request; `jack help` lists all commands."""
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] in ("--version", "-V", "version"):
         from autobot import __version__
 
         print(f"jack {__version__}")
+        return 0
+    if argv and argv[0] in ("help", "--help", "-h"):
+        print(_usage_text())  # discovery: list every command before any daemon/trust work
         return 0
     if argv and argv[0] == "serve":
         from autobot.daemon.__main__ import main as daemon_main
@@ -261,13 +337,18 @@ def main(argv: list[str] | None = None) -> int:
         except (RuntimeError, ValueError) as exc:
             print(str(exc), file=sys.stderr)
             return 1
+    # Fallthrough: argv[0] is not a known subcommand. A bare word is a mistyped/unknown command —
+    # teach with `jack help`, never silently run it as an agent turn (that's what `-p` is for).
+    # Anything else is flags mode: `-p "…"` one-shot request, otherwise open the TUI.
+    if argv and not argv[0].startswith("-"):
+        return _unknown_command(argv)
+    prompt, rest = _split_prompt(argv)
     parser = argparse.ArgumentParser(prog="jack", description="Jack coding agent (terminal).")
-    parser.add_argument("text", nargs="*", help="a coding request; omit to open the TUI")
     parser.add_argument(
         "--port", type=int, default=None, help="coder daemon port (default: per-workspace)"
     )
     parser.add_argument("--workspace", default=None, help="workspace dir (default: cwd)")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(rest)
     ws = resolve_workspace(Path.cwd(), args.workspace)
     if not _ensure_trusted(ws):
         return 1
@@ -277,8 +358,8 @@ def main(argv: list[str] | None = None) -> int:
         ensure_daemon(base_url, port, workspace=str(ws))
         print(f"workspace: {ws}", file=sys.stderr)
         _maybe_backend_hint()
-        if args.text:
-            print(run_coder_turn(base_url, " ".join(args.text)))
+        if prompt is not None:
+            print(run_coder_turn(base_url, prompt))
         else:
             import autobot.cli.tui as tui
 
