@@ -275,7 +275,7 @@
   async function play(){
     var my=++gen; resetAll();
     // build the app
-    await typeCmd('jack "build a todo web app with Flask — add tasks, mark done, saved to todos.json"',19);
+    await typeCmd('jack -p "build a todo web app with Flask — add tasks, mark done, saved to todos.json"',19);
     gap();
     var sp1=spinner(); await sleep(reduce?0:1600); sp1.stop();
     row('plan',true).innerHTML='<span class="h">Plan</span>';

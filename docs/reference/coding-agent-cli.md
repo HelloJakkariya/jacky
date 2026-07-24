@@ -24,7 +24,8 @@ jack config set model claude-sonnet-5
 # 3. Run jack inside the project you want to work on
 cd ~/code/my-project
 jack                      # opens the interactive TUI
-jack "add a docstring to foo.py"   # or run one request and print the reply
+jack -p "add a docstring to foo.py"   # or run one request and print the reply
+jack help                 # list every command (also jack --help / -h)
 ```
 
 A new key or setting takes effect on the **next turn** — no daemon restart. `jack`
@@ -94,7 +95,11 @@ endpoint) — same keyring, same effect.
 
 - `jack` — open the interactive TUI (an inline REPL with streaming replies, live tool
   activity, plan/permission cards, and a working-tree diff after each change).
-- `jack "<request>"` — one-shot: run a single coding turn, print the reply, exit.
+- `jack -p "<request>"` — one-shot: run a single coding turn, print the reply, exit.
+  (A bare word that isn't a subcommand — e.g. `jack sessions` — is treated as a mistyped
+  command and points you at `jack help`, never silently run as a request.)
+- `jack help` — list every subcommand with a one-line summary (also `jack --help` / `-h`);
+  run `jack <command> help` for a command's own options.
 - `jack --port <N>` — target a daemon on a non-default port.
 - `jack --workspace <path>` — work in `<path>` instead of the launch directory.
 - `jack restart` — stop the coder daemon (use it after upgrading Jack, or to switch it to

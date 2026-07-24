@@ -55,6 +55,6 @@ def test_turn_aborts_when_untrusted_and_noninteractive(
         reached["daemon"] = True
 
     monkeypatch.setattr("autobot.cli.ensure_daemon", fake_ensure)
-    rc = cli_main(["do a thing"])
+    rc = cli_main(["-p", "do a thing"])
     assert rc == 1 and reached["daemon"] is False
     assert "not a trusted workspace" in capsys.readouterr().err.lower()
